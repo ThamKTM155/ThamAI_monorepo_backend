@@ -1,34 +1,93 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import openai
 import os
+import tempfile
+from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS
+from openai import OpenAI
 
+# Khởi tạo Flask
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})  # Cho phép tất cả domain gọi API
 
-# API key OpenAI (anh set trong biến môi trường hoặc .env)
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# Kết nối OpenAI (API key từ biến môi trường)
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# ✅ Route Chat (AI trả lời văn bản)
 @app.route("/chat", methods=["POST"])
 def chat():
-    data = request.get_json()
-    user_message = data.get("message", "")
-
-    if not user_message:
-        return jsonify({"reply": "Xin lỗi, tôi chưa nghe thấy gì."})
-
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
+        data = request.json
+        message = data.get("message", "")
+
+        if not message:
+            return jsonify({"error": "No message provided"}), 400
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "Bạn là ThắmAI, trợ lý AI nói tiếng Việt thân thiện."},
-                {"role": "user", "content": user_message}
-            ]
+                {"role": "system", "content": "Bạn là một trợ lý AI thân thiện."},
+                {"role": "user", "content": message},
+            ],
         )
-        reply = response["choices"][0]["message"]["content"]
+
+        reply = response.choices[0].message.content
         return jsonify({"reply": reply})
+
     except Exception as e:
-        return jsonify({"reply": f"Lỗi khi gọi AI: {str(e)}"})
+        return jsonify({"error": str(e)}), 500
+
+
+# ✅ Route TTS (chuyển văn bản thành giọng nói)
+@app.route("/tts", methods=["POST"])
+def tts():
+    try:
+        data = request.json
+        text = data.get("text", "")
+
+        if not text:
+            return jsonify({"error": "No text provided"}), 400
+
+        # Gọi OpenAI TTS
+        with client.audio.speech.with_streaming_response.create(
+            model="gpt-4o-mini-tts",
+            voice="alloy",
+            input=text,
+        ) as response:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+                response.stream_to_file(tmp.name)
+                return send_file(tmp.name, mimetype="audio/mpeg")
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ✅ Route Transcribe (giọng nói -> văn bản)
+@app.route("/transcribe", methods=["POST"])
+def transcribe():
+    try:
+        if "file" not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
+
+        file = request.files["file"]
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+            file.save(tmp.name)
+
+            transcript = client.audio.transcriptions.create(
+                model="gpt-4o-transcribe",
+                file=open(tmp.name, "rb"),
+            )
+
+            return jsonify({"text": transcript.text})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ✅ Route test
+@app.route("/", methods=["GET"])
+def home():
+    return "✅ ThamAI Backend đang chạy!"
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
