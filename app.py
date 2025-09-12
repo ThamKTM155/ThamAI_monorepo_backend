@@ -35,7 +35,6 @@ def chat():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 # ✅ Route TTS (chuyển văn bản thành giọng nói)
 @app.route("/tts", methods=["POST"])
 def tts():
@@ -46,19 +45,23 @@ def tts():
         if not text:
             return jsonify({"error": "No text provided"}), 400
 
-        # Gọi OpenAI TTS
+        # Tạo file tạm để lưu audio
+        tmp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3").name
+
+        # Gọi OpenAI TTS và stream ra file
         with client.audio.speech.with_streaming_response.create(
-            model="gpt-4o-mini-tts",
+            model="gpt-4o-mini-tts",  # hoặc "gpt-4o-tts"
             voice="alloy",
             input=text,
         ) as response:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
-                response.stream_to_file(tmp.name)
-                return send_file(tmp.name, mimetype="audio/mpeg")
+            response.stream_to_file(tmp_path)
+
+        # Trả về file mp3
+        return send_file(tmp_path, mimetype="audio/mpeg")
 
     except Exception as e:
+        print("🔥 TTS error:", e)
         return jsonify({"error": str(e)}), 500
-
 
 # ✅ Route Transcribe (giọng nói -> văn bản)
 @app.route("/transcribe", methods=["POST"])
@@ -81,7 +84,6 @@ def transcribe():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 # ✅ Route test
 @app.route("/", methods=["GET"])
