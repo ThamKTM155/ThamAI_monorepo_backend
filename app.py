@@ -6,7 +6,7 @@ from openai import OpenAI
 
 # Khởi tạo Flask
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})  # Cho phép tất cả domain gọi API
+CORS(app, resources={r"/*": {"origins": ["*"]}}, supports_credentials=True)
 
 # Kết nối OpenAI (API key từ biến môi trường)
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -49,12 +49,16 @@ def tts():
         tmp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3").name
 
         # Gọi OpenAI TTS và stream ra file
-        with client.audio.speech.with_streaming_response.create(
-            model="gpt-4o-mini-tts",  # hoặc "gpt-4o-tts"
-            voice="alloy",
-            input=text,
-        ) as response:
-            response.stream_to_file(tmp_path)
+        response = client.audio.speech.create(
+    model="gpt-4o-mini-tts",
+    voice="alloy",
+    input=text,
+)
+
+with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+    tmp.write(response.data)
+    tmp.flush()
+    return send_file(tmp.name, mimetype="audio/mpeg")
 
         # Trả về file mp3
         return send_file(tmp_path, mimetype="audio/mpeg")
