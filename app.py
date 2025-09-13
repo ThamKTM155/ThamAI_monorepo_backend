@@ -34,6 +34,18 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # ----------------------------
 # Routes
+# thêm import logging nếu chưa có
+import logging
+
+# --- ở phần routes, thêm ---
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({
+        "status": "ok",
+        "service": "ThamAI Backend",
+        "openai_key_set": bool(openai.api_key),
+    })
+
 # ----------------------------
 @app.route("/", methods=["GET"])
 def home():
